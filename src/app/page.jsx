@@ -105,7 +105,7 @@ export default function Home() {
         }
       }
     } catch (err) {
-      setError(`Connection error: ${err.message}. Make sure the Flask API is running on http://localhost:5000`)
+      setError(`Connection error: ${err.message}.`)
     } finally {
       setIsAnalyzing(false)
     }
