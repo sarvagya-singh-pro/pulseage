@@ -1,6 +1,6 @@
 "use client";
-import { useState } from 'react'
-import { ArrowRight, Activity, Brain, Users, FileText, BarChart3, Shield, Upload, X, Check, Loader2, AlertCircle } from 'lucide-react'
+import { useState ,useEffect} from 'react'
+import { ArrowRight, Activity, Brain, Users, FileText, BarChart3, Shield,Monitor, Upload, X, Check, Loader2, AlertCircle } from 'lucide-react'
 
 export default function Home() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -9,7 +9,15 @@ export default function Home() {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [results, setResults] = useState(null)
   const [error, setError] = useState(null)
-
+  const [isMobile, setIsMobile] = useState(false)
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 1024)
+    }
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
   const API_BASE_URL = 'https://pulsesage-api-739266692949.us-central1.run.app/api'
 
   const handleFileUpload = (type, file) => {
@@ -50,12 +58,10 @@ export default function Home() {
     try {
       const formData = new FormData()
       
-      // Check which files are uploaded
       const hasECG = uploadedFiles.ecg !== null
       const hasCMRI = uploadedFiles.cmri !== null
 
       if (hasECG && hasCMRI) {
-        // Multimodal analysis
         formData.append('ecg', uploadedFiles.ecg)
         formData.append('cmri', uploadedFiles.cmri)
         
@@ -72,7 +78,6 @@ export default function Home() {
           setError(data.error || 'Analysis failed')
         }
       } else if (hasECG) {
-        // ECG only
         formData.append('file', uploadedFiles.ecg)
         
         const response = await fetch(`${API_BASE_URL}/analyze/ecg`, {
@@ -88,7 +93,6 @@ export default function Home() {
           setError(data.error || 'ECG analysis failed')
         }
       } else if (hasCMRI) {
-        // cMRI only
         formData.append('file', uploadedFiles.cmri)
         
         const response = await fetch(`${API_BASE_URL}/analyze/cmri`, {
@@ -105,10 +109,37 @@ export default function Home() {
         }
       }
     } catch (err) {
-      setError(`Connection error: ${err.message}.`)
+      setError(`Connection error: ${err.message}`)
     } finally {
       setIsAnalyzing(false)
     }
+  }
+
+  // Mobile Warning Banner
+  if (isMobile) {
+    return (
+      <main className="min-h-screen bg-black text-white flex items-center justify-center p-6">
+        <div className="max-w-md text-center">
+          <div className="w-20 h-20 bg-white/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
+            <Monitor className="w-10 h-10 text-white" />
+          </div>
+          <h1 className="text-3xl font-bold mb-4">Desktop Only</h1>
+          <p className="text-gray-400 mb-8 leading-relaxed">
+            PulseSage demo requires a desktop or laptop computer for optimal visualization and analysis. 
+            Please visit this site on a larger screen.
+          </p>
+          <div className="p-4 bg-white/5 rounded-lg border border-white/10 text-left">
+            <p className="text-xs text-gray-500 mb-2">Why desktop only?</p>
+            <ul className="space-y-1 text-xs text-gray-400">
+              <li>• Large medical imaging visualizations</li>
+              <li>• Complex LIME explainability plots</li>
+              <li>• Multi-panel analysis views</li>
+              <li>• High-resolution data displays</li>
+            </ul>
+          </div>
+        </div>
+      </main>
+    )
   }
 
   return (
@@ -511,18 +542,24 @@ export default function Home() {
 
               {/* ECG Visualizations */}
               {results.results?.ecg_plot && (
+              
                 <div className="space-y-6">
                   <h3 className="text-xl font-semibold text-white">ECG Signal Analysis</h3>
                   
+                  {/* ECG Plot */}
                   <div className="bg-white/5 rounded-lg border border-white/10 overflow-hidden">
                     <div className="p-4 border-b border-white/10">
                       <h4 className="text-sm font-medium text-gray-300">Original ECG Signal</h4>
                     </div>
-                    <div className="p-4">
+                    <div className="p-4 bg-white">
                       <img
                         src={`data:image/png;base64,${results.results.ecg_plot}`}
                         alt="ECG Signal"
                         className="w-full rounded"
+                        onError={(e) => {
+                          console.error('ECG plot failed to load')
+                          e.target.style.display = 'none'
+                        }}
                       />
                     </div>
                   </div>
@@ -541,6 +578,24 @@ export default function Home() {
                       </div>
                     </div>
                   )}
+                   {results.results?.lime_plot && (
+                <div className="bg-white/5 rounded-lg border border-white/10 overflow-hidden">
+                  <div className="p-4 border-b border-white/10">
+                    <h4 className="text-sm font-medium text-gray-300">LIME Explainability</h4>
+                  </div>
+                  <div className="p-4 bg-white">
+                    <img
+                      src={`data:image/png;base64,${results.results.lime_plot}`}
+                      alt="LIME Explanation"
+                      className="w-full rounded"
+                      onError={(e) => {
+                        console.error('LIME plot failed to load')
+                        e.target.style.display = 'none'
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
 
                   {/* Top Influential Segments */}
                   {results.results?.top_influential_segments && (
