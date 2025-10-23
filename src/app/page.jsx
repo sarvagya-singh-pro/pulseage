@@ -195,7 +195,7 @@ export default function Home() {
                 <ArrowRight className="w-4 h-4" />
               </a>
               <a 
-                href="https://drive.google.com/file/d/1ccslUsnlXYS4Dh853XDCAjQ17ItS7P0B/view?usp=sharing"
+                href="https://drive.google.com/file/d/1L95W6B5Ecsq_Qa_J-FyyX0eLFwj_uwvY/view"
                 className="px-8 py-3 border border-white/20 text-white rounded-md font-medium hover:bg-white/5 transition text-sm"
               >
                 Read Paper
@@ -864,7 +864,7 @@ export default function Home() {
 
           <div>
             <a
-              href="https://drive.google.com/file/d/1ccslUsnlXYS4Dh853XDCAjQ17ItS7P0B/view?usp=sharing"
+              href="https://drive.google.com/file/d/1L95W6B5Ecsq_Qa_J-FyyX0eLFwj_uwvY/view"
               className="inline-flex items-center gap-2 px-8 py-3 bg-white text-black rounded-md font-medium hover:bg-gray-200 transition text-sm"
             >
               <FileText className="w-4 h-4" />
