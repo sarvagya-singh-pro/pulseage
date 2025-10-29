@@ -1,15 +1,80 @@
 "use client";
-import { useState ,useEffect} from 'react'
-import { ArrowRight, Activity, Brain, Users, FileText, BarChart3, Shield,Monitor, Upload, X, Check, Loader2, AlertCircle } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { ArrowRight, Activity, Brain, Users, FileText, BarChart3, Shield, Monitor, Upload, X, Check, Loader2, AlertCircle } from 'lucide-react'
 
 export default function Home() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
-  const [uploadedFiles, setUploadedFiles] = useState({ecg: null, cmri: null})
-  const [isDragging, setIsDragging] = useState({ecg: false, cmri: false})
+  const [uploadedFiles, setUploadedFiles] = useState({ ecg: null, cmri: null })
+  const [isDragging, setIsDragging] = useState({ ecg: false, cmri: false })
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [results, setResults] = useState(null)
   const [error, setError] = useState(null)
   const [isMobile, setIsMobile] = useState(false)
+  const [loadingProgress, setLoadingProgress] = useState(0)
+  const [loadingStage, setLoadingStage] = useState("")
+  const [currentFact, setCurrentFact] = useState("")
+  const [isLoadingSamples, setIsLoadingSamples] = useState(false)
+  
+  const loadingIntervalRef = useRef(null)
+  const factIntervalRef = useRef(null)
+  const loadSampleData = async (type) => {
+    setError(null)
+    setResults(null)
+    setIsLoadingSamples(true)
+    
+    try {
+      if (type === 'ecg' || type === 'both') {
+        const response = await fetch('/sample.dat')
+        if (!response.ok) throw new Error('Failed to load sample ECG')
+        const blob = await response.blob()
+        const file = new File([blob], 'sample.dat', { type: 'application/octet-stream' })
+        handleFileUpload('ecg', file)
+      }
+      
+      if (type === 'cmri' || type === 'both') {
+        const response = await fetch('/sample.jpg')
+        if (!response.ok) throw new Error('Failed to load sample cMRI')
+        const blob = await response.blob()
+        const file = new File([blob], 'sample.jpg', { type: 'image/png' })
+        handleFileUpload('cmri', file)
+      }
+      
+      // Auto-analyze after loading both files
+      if (type === 'both') {
+        setTimeout(() => {
+          analyzeData()
+        }, 500)
+      }
+    } catch (err) {
+      setError(`Failed to load sample data: ${err.message}`)
+      console.error('Sample data loading error:', err)
+    } finally {
+      setIsLoadingSamples(false)
+    }
+  }
+  const API_BASE_URL = 'https://pulsesage-api-739266692949.us-central1.run.app/api'
+
+  const stages = [
+    { threshold: 5, message: "Booting secure environment..." },
+    { threshold: 15, message: "Calibrating neural network weights..." },
+    { threshold: 25, message: "Loading ECG signal decoders..." },
+    { threshold: 35, message: "Starting CMRI image segmentation..." },
+    { threshold: 50, message: "Warming up Tensor cores..." },
+    { threshold: 60, message: "Verifying model checksums..." },
+    { threshold: 75, message: "Running diagnostic health checks..." },
+    { threshold: 85, message: "Syncing with biomedical database..." },
+    { threshold: 94, message: "Finalizing personalized AI explanations..." },
+    { threshold: 100, message: "PulseSage is ready for analysis!" }
+  ]
+
+  const funFacts = [
+    "Did you know? Your heart beats 100,000 times a day!",
+    "Fun fact: AI can spot ECG outliers faster than cardiologists.",
+    "Tip: The CMRI image should be centered for best results.",
+    "PulseSage models store millions of cardiac profiles.",
+    "99% of ECG analysis in PulseSage is done within 3 seconds.",
+  ]
+
   useEffect(() => {
     const checkMobile = () => {
       setIsMobile(window.innerWidth < 1024)
@@ -18,7 +83,97 @@ export default function Home() {
     window.addEventListener('resize', checkMobile)
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
-  const API_BASE_URL = 'https://pulsesage-api-739266692949.us-central1.run.app/api'
+
+  const startLoading = () => {
+    setLoadingProgress(0)
+    setLoadingStage(stages[0].message)
+    setCurrentFact(funFacts[0])
+    
+    let elapsed = 0
+    loadingIntervalRef.current = setInterval(() => {
+      elapsed += 1
+      const percent = Math.floor((elapsed / 90) * 100)
+      const cappedPercent = Math.min(percent, 99)
+      setLoadingProgress(cappedPercent)
+
+      const stageObj = stages.find(s => cappedPercent <= s.threshold)
+      setLoadingStage(stageObj ? stageObj.message : stages[stages.length - 1].message)
+
+      if (elapsed >= 90) {
+        clearInterval(loadingIntervalRef.current)
+      }
+    }, 1000)
+
+    factIntervalRef.current = setInterval(() => {
+      setCurrentFact(funFacts[Math.floor(Math.random() * funFacts.length)])
+    }, 15000)
+  }
+
+  const stopLoading = () => {
+    if (loadingIntervalRef.current) {
+      clearInterval(loadingIntervalRef.current)
+      loadingIntervalRef.current = null
+    }
+    if (factIntervalRef.current) {
+      clearInterval(factIntervalRef.current)
+      factIntervalRef.current = null
+    }
+    setLoadingProgress(100)
+    setLoadingStage("Analysis complete!")
+  }
+
+  const analyzeData = async () => {
+    setIsAnalyzing(true)
+    setError(null)
+    setResults(null)
+    startLoading()
+
+    try {
+      const formData = new FormData()
+      const hasECG = uploadedFiles.ecg !== null
+      const hasCMRI = uploadedFiles.cmri !== null
+
+      let response
+      if (hasECG && hasCMRI) {
+        formData.append('ecg', uploadedFiles.ecg)
+        formData.append('cmri', uploadedFiles.cmri)
+        response = await fetch(`${API_BASE_URL}/analyze/multimodal`, {
+          method: 'POST',
+          body: formData
+        })
+      } else if (hasECG) {
+        formData.append('file', uploadedFiles.ecg)
+        response = await fetch(`${API_BASE_URL}/analyze/ecg`, {
+          method: 'POST',
+          body: formData
+        })
+      } else if (hasCMRI) {
+        formData.append('file', uploadedFiles.cmri)
+        response = await fetch(`${API_BASE_URL}/analyze/cmri`, {
+          method: 'POST',
+          body: formData
+        })
+      }
+
+      const data = await response.json()
+
+      if (data.success) {
+        setResults(data)
+        setError(null)
+      } else {
+        setError(data.error || 'Analysis failed')
+        setResults(null)
+      }
+    } catch (err) {
+      setError(`Connection error: ${err.message}`)
+      setResults(null)
+    } finally {
+      stopLoading()
+      setTimeout(() => {
+        setIsAnalyzing(false)
+      }, 800)
+    }
+  }
 
   const handleFileUpload = (type, file) => {
     setUploadedFiles(prev => ({ ...prev, [type]: file }))
@@ -50,72 +205,6 @@ export default function Home() {
     setError(null)
   }
 
-  const analyzeData = async () => {
-    setIsAnalyzing(true)
-    setError(null)
-    setResults(null)
-
-    try {
-      const formData = new FormData()
-      
-      const hasECG = uploadedFiles.ecg !== null
-      const hasCMRI = uploadedFiles.cmri !== null
-
-      if (hasECG && hasCMRI) {
-        formData.append('ecg', uploadedFiles.ecg)
-        formData.append('cmri', uploadedFiles.cmri)
-        
-        const response = await fetch(`${API_BASE_URL}/analyze/multimodal`, {
-          method: 'POST',
-          body: formData
-        })
-        
-        const data = await response.json()
-        
-        if (data.success) {
-          setResults(data)
-        } else {
-          setError(data.error || 'Analysis failed')
-        }
-      } else if (hasECG) {
-        formData.append('file', uploadedFiles.ecg)
-        
-        const response = await fetch(`${API_BASE_URL}/analyze/ecg`, {
-          method: 'POST',
-          body: formData
-        })
-        
-        const data = await response.json()
-        
-        if (data.success) {
-          setResults(data)
-        } else {
-          setError(data.error || 'ECG analysis failed')
-        }
-      } else if (hasCMRI) {
-        formData.append('file', uploadedFiles.cmri)
-        
-        const response = await fetch(`${API_BASE_URL}/analyze/cmri`, {
-          method: 'POST',
-          body: formData
-        })
-        
-        const data = await response.json()
-        
-        if (data.success) {
-          setResults(data)
-        } else {
-          setError(data.error || 'cMRI analysis failed')
-        }
-      }
-    } catch (err) {
-      setError(`Connection error: ${err.message}`)
-    } finally {
-      setIsAnalyzing(false)
-    }
-  }
-
-  // Mobile Warning Banner
   if (isMobile) {
     return (
       <main className="min-h-screen bg-black text-white flex items-center justify-center p-6">
@@ -195,7 +284,7 @@ export default function Home() {
                 <ArrowRight className="w-4 h-4" />
               </a>
               <a 
-                href="https://drive.google.com/file/d/1L95W6B5Ecsq_Qa_J-FyyX0eLFwj_uwvY/view"
+                href="https://drive.google.com/file/d/1xPlz5r7pRWpmxrjiAtpG812UsJraOpIt/view?usp=sharing"
                 className="px-8 py-3 border border-white/20 text-white rounded-md font-medium hover:bg-white/5 transition text-sm"
               >
                 Read Paper
@@ -252,7 +341,65 @@ export default function Home() {
           </div>
         </div>
       </section>
+      
+{/* Sample Data Section */}
+{/* Sample Data Section */}
+<div className="mb-12 p-6 bg-gradient-to-r from-black to-blue-500/10 rounded-lg border border-gray-800">
+            <div className="flex items-start gap-4 mb-6">
+              <div className="w-10 h-10 bg-black rounded-md flex items-center justify-center flex-shrink-0">
+                <FileText className="w-5 h-5 text-gray-400" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-white mb-2">
+                  Try with Sample Data
+                </h3>
+                <p className="text-sm text-gray-400 leading-relaxed">
+                  No medical data? Use our pre-loaded sample from anonymized research datasets. 
+                  Multimodal analysis provides the most comprehensive diagnosis.
+                </p>
+              </div>
+            </div>
 
+            <button
+              onClick={() => loadSampleData('both')}
+              disabled={isAnalyzing}
+              className="w-full p-6 bg-gradient-to-br from-black to-blue-500/10 hover:from-purple-500/20 hover:to-blue-500/20 border border-black hover:border-purple-500/40 rounded-lg transition text-left group disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  
+                  <div>
+                    <span className="text-base font-semibold text-white block">Multimodal Sample Data</span>
+                    <span className="text-xs text-gray-500">ECG + cMRI combined analysis</span>
+                  </div>
+                </div>
+                <ArrowRight className="w-5 h-5 text-purple-400 group-hover:text-purple-300 transition" />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="p-3 bg-white/5 rounded border border-white/10">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Activity className="w-4 h-4 text-blue-400" />
+                    <span className="text-xs font-medium text-white">12-Lead ECG</span>
+                  </div>
+                  <p className="text-xs text-gray-500">sample_ecg.dat</p>
+                </div>
+                <div className="p-3 bg-white/5 rounded border border-white/10">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Brain className="w-4 h-4 text-green-400" />
+                    <span className="text-xs font-medium text-white">Cardiac MRI</span>
+                  </div>
+                  <p className="text-xs text-gray-500">sample_cmri.jpg</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 text-xs text-purple-400 group-hover:text-purple-300 transition font-medium">
+             
+              </div>
+            </button>
+
+          
+          </div>
       {/* Demo Section */}
       <section id="demo" className="py-32 px-6 bg-black border-t border-white/10">
         <div className="max-w-6xl mx-auto">
@@ -334,7 +481,7 @@ export default function Home() {
             {/* cMRI Upload */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-4">
-                cMRI Scan (Coming Soon)
+                cMRI Scan
               </label>
               <div
                 onDragOver={(e) => handleDragOver(e, 'cmri')}
@@ -416,7 +563,7 @@ export default function Home() {
               className={`px-8 py-3 rounded-md font-medium text-sm transition inline-flex items-center gap-2 ${
                 uploadedFiles.ecg || uploadedFiles.cmri
                   ? isAnalyzing
-                    ? 'bg-white/20 text-gray-300 cursor-wait'
+                    ? 'bg-white/10 text-gray-400 cursor-wait'
                     : 'bg-white text-black hover:bg-gray-200'
                   : 'bg-white/10 text-gray-500 cursor-not-allowed'
               }`}
@@ -435,8 +582,35 @@ export default function Home() {
             </button>
           </div>
 
+          {/* Loading State */}
+          {isAnalyzing && (
+            <div className="mb-12 p-8 bg-white/5 rounded-lg border border-white/10">
+              <div className="flex items-center gap-4 mb-6">
+                <Loader2 className="w-6 h-6 animate-spin text-white" />
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-white mb-1">
+                    Processing Analysis
+                  </h3>
+                  <p className="text-sm text-gray-400">{loadingStage}</p>
+                </div>
+                <span className="text-sm font-medium text-gray-300">
+                  {loadingProgress}%
+                </span>
+              </div>
+
+              <div className="w-full bg-white/10 rounded-full h-2 mb-4">
+                <div
+                  style={{ width: `${loadingProgress}%` }}
+                  className="bg-white h-2 rounded-full transition-all duration-500"
+                />
+              </div>
+
+              <p className="text-xs text-gray-500 italic">{currentFact}</p>
+            </div>
+          )}
+
           {/* Results Display */}
-          {results && (
+          {results && !isAnalyzing && (
             <div className="space-y-8">
               {/* Diagnosis Card */}
               <div className="p-8 bg-gradient-to-br from-white/10 to-white/5 rounded-lg border border-white/20">
@@ -510,28 +684,28 @@ export default function Home() {
                         <div className="flex justify-between mb-2">
                           <span className="text-sm text-gray-300">HCM Probability</span>
                           <span className="text-sm font-medium text-white">
-                            {((results.results?.hcm_probability || 0) * 100).toFixed(1)}%
+                            {((results.hcm_probability || 0) * 100).toFixed(1)}%
                           </span>
                         </div>
                         <div className="w-full bg-white/10 rounded-full h-3">
                           <div
                             className="bg-red-500 h-3 rounded-full transition-all duration-1000"
-                            style={{ width: `${(results.results?.hcm_probability || 0) * 100}%` }}
+                            style={{ width: `${(results.hcm_probability || 0) * 100}%` }}
                           />
                         </div>
                       </div>
 
                       <div>
                         <div className="flex justify-between mb-2">
-                          <span className="text-sm text-gray-300">Not HCM Probability</span>
+                          <span className="text-sm text-gray-300">Normal Probability</span>
                           <span className="text-sm font-medium text-white">
-                            {((results.results?.not_hcm_probability || 0) * 100).toFixed(1)}%
+                            {((results.normal_probability || 0) * 100).toFixed(1)}%
                           </span>
                         </div>
                         <div className="w-full bg-white/10 rounded-full h-3">
                           <div
                             className="bg-green-500 h-3 rounded-full transition-all duration-1000"
-                            style={{ width: `${(results.results?.not_hcm_probability || 0) * 100}%` }}
+                            style={{ width: `${(results.normal_probability || 0) * 100}%` }}
                           />
                         </div>
                       </div>
@@ -541,8 +715,7 @@ export default function Home() {
               </div>
 
               {/* ECG Visualizations */}
-              {results.results?.ecg_plot && (
-              
+              {(results.ecg_plot || results.ecg_results?.ecg_plot) && (
                 <div className="space-y-6">
                   <h3 className="text-xl font-semibold text-white">ECG Signal Analysis</h3>
                   
@@ -553,58 +726,38 @@ export default function Home() {
                     </div>
                     <div className="p-4 bg-white">
                       <img
-                        src={`data:image/png;base64,${results.results.ecg_plot}`}
+                        src={`data:image/png;base64,${results.ecg_plot || results.ecg_results?.ecg_plot}`}
                         alt="ECG Signal"
                         className="w-full rounded"
-                        onError={(e) => {
-                          console.error('ECG plot failed to load')
-                          e.target.style.display = 'none'
-                        }}
                       />
                     </div>
                   </div>
 
-                  {results.results?.segmented_plot && (
+                  {/* LIME Plot - THE FIX IS HERE */}
+                  {(results.lime_plot || results.ecg_results?.lime_plot) && (
                     <div className="bg-white/5 rounded-lg border border-white/10 overflow-hidden">
                       <div className="p-4 border-b border-white/10">
-                        <h4 className="text-sm font-medium text-gray-300">Segmented Analysis with LIME</h4>
+                        <h4 className="text-sm font-medium text-gray-300">🔬 LIME Explainability</h4>
+                        <p className="text-xs text-gray-500 mt-1">Highlighted regions show which segments influenced the diagnosis</p>
                       </div>
-                      <div className="p-4">
+                      <div className="p-4 bg-white">
                         <img
-                          src={`data:image/png;base64,${results.results.segmented_plot}`}
-                          alt="Segmented ECG"
+                          src={`data:image/png;base64,${results.ecg_results?.lime_plot}`}
+                          alt="LIME Explanation"
                           className="w-full rounded"
                         />
                       </div>
                     </div>
                   )}
-                   {results.results?.lime_plot && (
-                <div className="bg-white/5 rounded-lg border border-white/10 overflow-hidden">
-                  <div className="p-4 border-b border-white/10">
-                    <h4 className="text-sm font-medium text-gray-300">LIME Explainability</h4>
-                  </div>
-                  <div className="p-4 bg-white">
-                    <img
-                      src={`data:image/png;base64,${results.results.lime_plot}`}
-                      alt="LIME Explanation"
-                      className="w-full rounded"
-                      onError={(e) => {
-                        console.error('LIME plot failed to load')
-                        e.target.style.display = 'none'
-                      }}
-                    />
-                  </div>
-                </div>
-              )}
 
                   {/* Top Influential Segments */}
-                  {results.results?.top_influential_segments && (
+                  {(results.top_influential_segments || results.ecg_results?.top_influential_segments) && (
                     <div className="p-6 bg-white/5 rounded-lg border border-white/10">
                       <h4 className="text-sm font-semibold text-white mb-4">
                         Top Influential Segments
                       </h4>
                       <div className="flex flex-wrap gap-2">
-                        {results.results.top_influential_segments.map((segment, idx) => (
+                        {(results.top_influential_segments || results.ecg_results?.top_influential_segments).map((segment, idx) => (
                           <span
                             key={idx}
                             className="px-3 py-1 bg-purple-500/20 text-purple-300 rounded-md text-xs font-medium border border-purple-500/30"
@@ -621,6 +774,44 @@ export default function Home() {
                 </div>
               )}
 
+              {/* CMRI Visualizations - FIXED LIME DISPLAY */}
+              {(results.original_image || results.cmri_results?.original_image) && (
+                <div className="space-y-6">
+                  <h3 className="text-xl font-semibold text-white">cMRI Analysis</h3>
+                  
+                  {/* Original Image */}
+                  <div className="bg-white/5 rounded-lg border border-white/10 overflow-hidden">
+                    <div className="p-4 border-b border-white/10">
+                      <h4 className="text-sm font-medium text-gray-300">Original cMRI Scan</h4>
+                    </div>
+                    <div className="p-4 bg-white">
+                      <img
+                        src={`data:image/png;base64,${results.original_image || results.cmri_results?.original_image}`}
+                        alt="Original CMRI"
+                        className="w-full max-w-md mx-auto rounded"
+                      />
+                    </div>
+                  </div>
+
+                  {/* LIME Plot - THE FIX IS HERE */}
+                  {(results.lime_plot || results.cmri_results?.lime_plot) && (
+                    <div className="bg-white/5 rounded-lg border border-white/10 overflow-hidden">
+                      <div className="p-4 border-b border-white/10">
+                        <h4 className="text-sm font-medium text-gray-300">🔬 LIME Explainability</h4>
+                        <p className="text-xs text-gray-500 mt-1">Highlighted regions show which areas influenced the diagnosis</p>
+                      </div>
+                      <div className="p-4 bg-white">
+                        <img
+                          src={`data:image/png;base64,${results.lime_plot || results.cmri_results?.lime_plot}`}
+                          alt="CMRI LIME Explanation"
+                          className="w-full rounded"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Model Information */}
               <div className="grid md:grid-cols-2 gap-6">
                 <div className="p-6 bg-white/5 rounded-lg border border-white/10">
@@ -628,18 +819,18 @@ export default function Home() {
                   <div className="space-y-2 text-xs text-gray-400">
                     <div className="flex justify-between">
                       <span>Analysis Type:</span>
-                      <span className="text-white font-medium">{results.type}</span>
+                      <span className="text-white font-medium">{results.type || results.modality}</span>
                     </div>
-                    {results.results?.num_slices && (
+                    {results.num_slices && (
                       <div className="flex justify-between">
                         <span>Signal Segments:</span>
-                        <span className="text-white font-medium">{results.results.num_slices}</span>
+                        <span className="text-white font-medium">{results.num_slices}</span>
                       </div>
                     )}
-                    {results.results?.ecg_length && (
+                    {results.sampling_frequency && (
                       <div className="flex justify-between">
-                        <span>Signal Length:</span>
-                        <span className="text-white font-medium">{results.results.ecg_length} samples</span>
+                        <span>Sampling Rate:</span>
+                        <span className="text-white font-medium">{results.sampling_frequency} Hz</span>
                       </div>
                     )}
                   </div>
@@ -648,7 +839,7 @@ export default function Home() {
                 <div className="p-6 bg-white/5 rounded-lg border border-white/10">
                   <h4 className="text-sm font-semibold text-white mb-4">Model Performance</h4>
                   <div className="space-y-2 text-xs text-gray-400">
-                    {results.type === 'ecg' || results.ecg_results ? (
+                    {(results.type === 'ecg' || results.modality === 'ECG' || results.ecg_results) && (
                       <>
                         <div className="flex justify-between">
                           <span>ECG Model Accuracy:</span>
@@ -659,8 +850,8 @@ export default function Home() {
                           <span className="text-white font-medium">89.35%</span>
                         </div>
                       </>
-                    ) : null}
-                    {results.type === 'cmri' || results.cmri_results ? (
+                    )}
+                    {(results.type === 'cmri' || results.modality === 'CMRI' || results.cmri_results) && (
                       <>
                         <div className="flex justify-between">
                           <span>cMRI Model Accuracy:</span>
@@ -671,7 +862,7 @@ export default function Home() {
                           <span className="text-white font-medium">98.70%</span>
                         </div>
                       </>
-                    ) : null}
+                    )}
                   </div>
                 </div>
               </div>
@@ -864,7 +1055,7 @@ export default function Home() {
 
           <div>
             <a
-              href="https://drive.google.com/file/d/1L95W6B5Ecsq_Qa_J-FyyX0eLFwj_uwvY/view"
+              href="https://drive.google.com/file/d/1xPlz5r7pRWpmxrjiAtpG812UsJraOpIt/view?usp=sharing"
               className="inline-flex items-center gap-2 px-8 py-3 bg-white text-black rounded-md font-medium hover:bg-gray-200 transition text-sm"
             >
               <FileText className="w-4 h-4" />
